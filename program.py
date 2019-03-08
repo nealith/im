@@ -45,7 +45,7 @@ def getPyramid (A):
 
 
 def matchImage(a,b,poi,poj,por,k=1):
-    print('matchImage ',poi,' ',poj)
+    print('matchImage ',poi,' ',poj,' ',por)
 
     #cv2.imshow('a',a)
     #cv2.imshow('b',b)
@@ -69,7 +69,7 @@ def matchImage(a,b,poi,poj,por,k=1):
     center = (cols / 2, rows / 2)
 
     rm = cv2.getRotationMatrix2D(center, por, 1.0)
-    cv2.warpAffine(b, rm, (rows, cols))
+    b = cv2.warpAffine(b, rm, (cols,rows),flags=cv2.WARP_INVERSE_MAP)
 
     for oi in range(-k,k+1,1):
         for oj in range(-k,k+1,1):
@@ -102,7 +102,9 @@ def matchImage(a,b,poi,poj,por,k=1):
                 B_r_rows, B_r_cols = B_r.shape
 
                 rm = cv2.getRotationMatrix2D(center, r, 1.0)
-                cv2.warpAffine(B_r_r, rm, (B_r_rows, B_r_cols))
+                B_r_r = cv2.warpAffine(B_r_r, rm, (B_r_cols,B_r_rows),flags=cv2.WARP_INVERSE_MAP)
+
+                B_r_r_rows, B_r_r_cols = B_r_r.shape
 
                 tmp_best = mutual_information(A_r,B_r_r)
                 if tmp_best > best:
@@ -180,7 +182,7 @@ def readjustment (A,B,laplacian):
     center = (new_cols / 2, new_rows / 2)
 
     rm = cv2.getRotationMatrix2D(center, r, 1.0)
-    cv2.warpAffine(new_B, rm, (rows, cols))
+    new_B = cv2.warpAffine(new_B, rm, (new_cols,new_rows),flags=cv2.WARP_INVERSE_MAP)
 
     return new_B,oi,oj,r
 
