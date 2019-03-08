@@ -1,6 +1,7 @@
 import cv2
 import numpy as np,sys
 import math
+import argparse
 
 def mutual_information(a,b):
 
@@ -43,7 +44,7 @@ def getPyramid (A):
     return gpA, lpA
 
 
-def matchImage(a,b,poi,poj,r=1):
+def matchImage(a,b,poi,poj,por,k=1):
     print('matchImage ',poi,' ',poj)
 
     #cv2.imshow('a',a)
@@ -59,16 +60,19 @@ def matchImage(a,b,poi,poj,r=1):
     rows,cols = a.shape
     result = {}
 
-    rr = a - b
-    rr *= rr
-
     best = mutual_information(a,b)
     best_oi = 0
     best_oj = 0
+    best_r = 0
     tmp_best = 0
 
-    for oi in range(-r,r+1,1):
-        for oj in range(-r,r+1,1):
+    center = (cols / 2, rows / 2)
+
+    rm = cv2.getRotationMatrix2D(center, por, 1.0)
+    cv2.warpAffine(b, rm, (rows, cols))
+
+    for oi in range(-k,k+1,1):
+        for oj in range(-k,k+1,1):
             B_r = np.zeros((rows,cols,1), np.uint8)
 
             B_r_i1 = max(0,oi+poi)
@@ -84,26 +88,47 @@ def matchImage(a,b,poi,poj,r=1):
             B_r = b[B_i1:B_i2, B_j1:B_j2]
             A_r = a[B_r_i1:B_r_i2, B_r_j1:B_r_j2]
 
-
             tmp_best = mutual_information(A_r,B_r)
             if tmp_best > best:
                 best = tmp_best
                 best_oi = oi
                 best_oj = oj
-
-    return best_oi,best_oj,best
-
+                best_r = por
 
 
-def matchPyramid(gA,gB):
+            for r in range(-1,2,1):
+                B_r_r = B_r.copy()
+
+                B_r_rows, B_r_cols = B_r.shape
+
+                rm = cv2.getRotationMatrix2D(center, r, 1.0)
+                cv2.warpAffine(B_r_r, rm, (B_r_rows, B_r_cols))
+
+                tmp_best = mutual_information(A_r,B_r_r)
+                if tmp_best > best:
+                    best = tmp_best
+                    best_oi = oi
+                    best_oj = oj
+                    best_r = r
+
+
+
+
+    return best_oi,best_oj,best_r
+
+
+
+def matchPyramid(pA,pB):
     print('patchPiramid')
     oi = 0
     oj = 0
-    score = 0
-    for i in range(len(gA)-1,0,-1):
-        noi,noj,score = matchImage(gA[i],gB[i],oi,oj,1)
+    r = 0
+    for i in range(len(pA)-1,0,-1):
+        noi,noj,nor = matchImage(pA[i],pB[i],oi,oj,r,1)
         noi += oi
         noj += oj
+        nor += r
+        r= nor
         if i != 0:
             oi = 2*noi
             oj = 2*noj
@@ -111,20 +136,28 @@ def matchPyramid(gA,gB):
             oi = noi
             oj = noj
 
-    return oi,oj,score
+    return oi,oj,r
 
 
 
 
 # A is the origin image, B is to readjust
-def readjustment (A,B):
+def readjustment (A,B,laplacian):
     print('readjustement')
 
     gpA, lpA = getPyramid(A)
     gpB, lpB = getPyramid(B)
 
-    oi,oj,score = matchPyramid(gpA,gpB)
-    print('final move : ',oi,';',oj)
+    oi = 0
+    oj = 0
+    r = 0
+
+    if laplacian == True:
+        oi,oj,r = matchPyramid(lpA,lpB)
+    else:
+        oi,oj,r = matchPyramid(gpA,gpB)
+
+    print('final move : ',oi,';',oj,';',r)
     rows,cols = A.shape
     new_B = np.zeros((rows,cols,1), np.uint8)
     rows,cols = B.shape
@@ -142,7 +175,14 @@ def readjustment (A,B):
 
     new_B[new_B_i1:new_B_i2, new_B_j1:new_B_j2] = B[B_i1:B_i2, B_j1:B_j2]
 
-    return new_B,score,oi,oj
+    new_rows,new_cols = new_B.shape
+
+    center = (new_cols / 2, new_rows / 2)
+
+    rm = cv2.getRotationMatrix2D(center, r, 1.0)
+    cv2.warpAffine(new_B, rm, (rows, cols))
+
+    return new_B,oi,oj,r
 
 def getBGR(im):
     print('getBGR')
@@ -188,29 +228,26 @@ def crop(img,Bi,Bj,Ri,Rj):
     return img[top_c:rows-top_c+bottom_c+1,left_c:cols-left_c+right_c+1]
 
 
+if __name__ == '__main__':
 
-def buildColoredImage(path):
-    print('buildColoredImage')
+    parser = argparse.ArgumentParser(description='Align and compose a colored image from Sergueï Prokoudine-Gorski\'s pictures')
+    parser.add_argument('-c','--crop',action='store_true',help='crop the image',default=False)
+    parser.add_argument('-l','--use_laplacian',action='store_true',help='use Laplacian pyramid for matching image instead of RGB channel',default=False)
+    parser.add_argument('-o','--output',help='path where to save the composition', required=True)
+    parser.add_argument('-i','--input',help='path to image that contains all color channels', required=True)
 
-    im = cv2.imread(path,flags=cv2.IMREAD_GRAYSCALE)
-    #cv2.imshow('im',gim)
-    #cv2.waitKey()
+    o = parser.parse_args()
+    im = cv2.imread(o.input,flags=cv2.IMREAD_GRAYSCALE)
+
 
     B,G,R = getBGR(im)
 
-    B,score1,Bi,Bj = readjustment(G,B)
-    R,score2,Ri,Rj = readjustment(G,R)
+    B,Bi,Bj,Br = readjustment(G,B,o.use_laplacian)
+    R,Ri,Rj,Rr = readjustment(G,R,o.use_laplacian)
 
     BGR = cv2.merge([B, G, R])
 
-    cv2.imshow('test',BGR)
-    cv2.waitKey()
+    if o.crop == True:
+        BGR = crop(BGR,Bi,Bj,Ri,Rj)
 
-    BGRc = crop(BGR,Bi,Bj,Ri,Rj)
-
-    cv2.imwrite('test.png',BGR)
-    cv2.imwrite('testc.png',BGRc)
-
-
-if __name__ == '__main__':
-    buildColoredImage('01887u.tif')
+    cv2.imwrite(o.output,BGR)
