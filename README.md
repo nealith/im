@@ -1,7 +1,7 @@
 # Automatic aligmement and color composition of picture
 
-This project is a Student project, the goal is to merge Sergey Prokudin-Gorsky pictures in one colored picture.
-Sergey Prokudin-Gorsky  use to take grayscale photo with colored filted to get the 3 colors channels. 
+This project is a student project, the goal is to merge Sergey Prokudin-Gorsky pictures in one colored picture.
+Sergey Prokudin-Gorsky  use to take grayscale photo with colored filter to get the 3 channels of BGR image. 
 
 # Get started
 
