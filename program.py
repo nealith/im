@@ -2,6 +2,7 @@ import cv2
 import numpy as np,sys
 import math
 import argparse
+from PIL import Image, ImageChops
 
 def mutual_information(a,b):
 
@@ -34,13 +35,13 @@ def getPyramid (A):
         if r < 100 or c < 100:
             loop = False
     # generate Laplacian Pyramid for A
-    lpA = [gpA[len(gpA)-1]]
+    lpA = []
     for i in range(len(gpA)-1,0,-1):
 
         size = (gpA[i-1].shape[1],gpA[i-1].shape[0])
         GE = cv2.pyrUp(gpA[i],dstsize=size)
         L = cv2.subtract(gpA[i-1],GE)
-        lpA.append(L)
+        lpA.insert(0,L)
     return gpA, lpA
 
 
@@ -121,6 +122,10 @@ def matchImage(a,b,poi,poj,por,k=1):
 
 
 def matchPyramid(pA,pB):
+
+
+
+
     print('patchPiramid')
     oi = 0
     oj = 0
@@ -149,6 +154,7 @@ def readjustment (A,B,laplacian):
 
     gpA, lpA = getPyramid(A)
     gpB, lpB = getPyramid(B)
+
 
     oi = 0
     oj = 0
@@ -197,6 +203,12 @@ def getBGR(im):
 
     return B,G,R
 
+
+# solution found on https://docs.opencv.org/3.1.0/d5/daf/tutorial_py_histogram_equalization.html
+def contrast(img):
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+    return clahe.apply(img)
+
 def crop(img,Bi,Bj,Ri,Rj):
     left_c = 0
     right_c = 0
@@ -230,22 +242,46 @@ def crop(img,Bi,Bj,Ri,Rj):
     return img[top_c:rows-top_c+bottom_c+1,left_c:cols-left_c+right_c+1]
 
 
+# come from : https://stackoverflow.com/questions/10615901/trim-whitespace-using-pil
+def trim(img):
+    bg = Image.new(img.mode, img.size, img.getpixel((0,0)))
+    diff = ImageChops.difference(img, bg)
+    diff = ImageChops.add(diff, diff, 2.0, -100)
+    bbox = diff.getbbox()
+    if bbox:
+        return img.crop(bbox)
+
+
 if __name__ == '__main__':
 
-    parser = argparse.ArgumentParser(description='Align and compose a colored image from Sergueï Prokoudine-Gorski\'s pictures')
-    parser.add_argument('-c','--crop',action='store_true',help='crop the image',default=False)
+    parser = argparse.ArgumentParser(description='Align and compose a colored image from Sergey Prokudin-Gorsky\'s pictures')
+    parser.add_argument('-c','--crop',action='store_true',help='automatic cropping the image',default=False)
+    parser.add_argument('-t','--trim',action='store_true',help='automatic trimming of white borders on the image',default=False)
+    parser.add_argument('-C','--contrast',action='store_true',help='automatic contrasting on the image',default=False)
     parser.add_argument('-l','--use_laplacian',action='store_true',help='use Laplacian pyramid for matching image instead of RGB channel',default=False)
     parser.add_argument('-o','--output',help='path where to save the composition', required=True)
     parser.add_argument('-i','--input',help='path to image that contains all color channels', required=True)
 
     o = parser.parse_args()
-    im = cv2.imread(o.input,flags=cv2.IMREAD_GRAYSCALE)
+    img = []
 
+    if o.trim == True:
+        pil_image = Image.open(o.input)
+        pil_image = trim(pil_image)
+        img = np.array(pil_image) 
 
-    B,G,R = getBGR(im)
+    else:
+        img = cv2.imread(o.input,flags=cv2.IMREAD_GRAYSCALE)
+
+    B,G,R = getBGR(img)
 
     B,Bi,Bj,Br = readjustment(G,B,o.use_laplacian)
     R,Ri,Rj,Rr = readjustment(G,R,o.use_laplacian)
+
+    if o.contrast == True:
+        B = contrast(B)
+        G = contrast(G)
+        R = contrast(R)
 
     BGR = cv2.merge([B, G, R])
 
